@@ -44,3 +44,11 @@ void drawBox(Adafruit_ILI9341& tft, uint16_t* imgBuf, int offset_x, int offset_y
     }
   } 
 }
+
+float get_point(float *p, uint8_t rows, uint8_t cols, int8_t x, int8_t y) {
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (x >= cols) x = cols - 1;
+    if (y >= rows) y = rows - 1;
+    return p[y * cols + x];
+}
