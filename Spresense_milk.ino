@@ -6,6 +6,7 @@
   https://github.com/kzhioki/Adafruit_ILI9341/archive/spresense.zip
 */
 #include <Wire.h>
+#include <SDHCI.h>
 #include <Adafruit_ILI9341.h>
 #include "define.h"
 #include "util.h"
@@ -17,19 +18,25 @@
 #define ROWS              24
 #define pixelsArraySize   (COLS * ROWS)
 
+// 適温判定の上限・下限
+#define TEMP_CEIL   40
+#define TEMP_FLOOR  39
+
+// 赤ちゃん画像が描かれているかどうか
+bool isBabyDrawn = false;
+
 #define DRAW_PIXELS_OFFSET_X  272
 #define DRAW_PIXELS_OFFSET_Y  16
-
-bool isNeedDraw = false;
 
 byte speed_setting = 1;  // High is 1, Low is 2
 
 Adafruit_ILI9341 tft = Adafruit_ILI9341(&SPI, TFT_DC_PIN, TFT_CS_PIN, TFT_RST_PIN);
 paramsMLX90640 mlx90640;
 
+SDClass sd;
+
 float pixels[COLS * ROWS];
 float reversePixels[COLS * ROWS];
-
 
 #define get_pixels(x, y)   (pixels[y * COLS + x])
 
@@ -106,12 +113,14 @@ void drawPixels(float *p, uint8_t rows, uint8_t cols) {
 }
 
 void draw() {
+  bool isBaby = false;
   char temp[16];
 
   tft.fillRect(16, 16, 144, 48, ILI9341_WHITE);
 
   sprintf(temp, "max: %.2fC", maxTemp);
-  if (39 <= maxTemp && maxTemp <= 40) {
+  if (TEMP_FLOOR <= maxTemp && maxTemp <= TEMP_CEIL) {
+    isBaby = true;
     drawStringCenter(tft, temp, 16, 16, 8, 8, ILI9341_RED, 2);
   } else {
     drawStringCenter(tft, temp, 16, 16, 8, 8, ILI9341_BLACK, 2);
@@ -126,10 +135,19 @@ void draw() {
   // show tmp image
 //  drawPixels(pixels, ROWS, COLS);
   drawPixels(reversePixels, ROWS, COLS);
+
+  if (isBaby != isBabyDrawn) {
+    drawBabyGraphic(tft, sd, isBaby);
+    isBabyDrawn = isBaby;
+  }
 }
 
 void setup() {
   Serial.begin(SERIAL_BAUDRATE);
+
+  while (!sd.begin()) { 
+    Serial.println("Insert SD card"); 
+  }
 
   Wire.begin();
   Wire.setClock(I2C_CLOCK);
@@ -156,6 +174,8 @@ void setup() {
   MLX90640_SetRefreshRate(0x33, 0x02);
 
   MLX90640_SetResolution(0x33, 0x03);
+
+  drawBabyGraphic(tft, sd, false);
 }
 
 void loop() {
@@ -218,7 +238,6 @@ void loop() {
   draw();
 
   endTime = millis();
-
   {
     char temp[16];
     sprintf(temp, "time: %ld msec", endTime - startTime);
